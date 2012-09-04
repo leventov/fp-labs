@@ -27,7 +27,24 @@ fib 1 = 1
 fib n = fib (n - 1) + fib (n - 2)
 
 
-gcd1 :: Integral a => a -> a -> a
-gcd1 a b | a == 0    = b
-         | b == 0    = a
-         | otherwise = gcd1 b (a rem b)
+gcd' 0 n = n
+gcd' n 0 = n
+gcd' a b = gcd' b (a `rem` b)
+
+prime 0 = False
+prime 1 = False
+prime 2 = True
+prime n = null [x | x <- [2..n], x*x <= n, n `rem` x == 0]
+
+
+lcm' a b = a * b `quot` gcd' a b
+
+
+mulAccum 0 n a = a
+mulAccum n 0 a = a
+mulAccum n m a = mulAccum (n-1) m (a+m)
+
+mul n m | n < 0 = - mul (-n) m
+        | m < 0 = - mul n (-m)
+        | otherwise = mulAccum n m 0
+
