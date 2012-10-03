@@ -1,15 +1,22 @@
 import Data.Functor ((<$>))
-import Data.List (intersperse, findIndex)
+import Control.Applicative ((<*>))
+import Control.Monad ((>=>), foldM)
+
 import Data.Maybe (fromMaybe)
 import Data.Either (either)
-import Data.Map (alter, empty, assocs)
 import Data.Char (isPunctuation, toLower)
+import Data.List (intersperse, findIndex, isPrefixOf)
+import Data.Map (alter, empty, assocs)
+
 import System.Environment (getArgs)
+
 import GHC.Exts (sortWith)
+import Text.Printf (printf)
 
 isVowel c = c `elem` "аеиоуыэюя"
 
-type StemWord = (String, (Int, Int))
+data StemWord = StemWord {reversedString :: String,
+                          rvBound :: Int, r2Bound :: Int}
 
 toStemWord s =
     let boundProcess p rs =
@@ -25,13 +32,9 @@ toStemWord s =
         r2I = boundProcess (not . isVowel) r1S
 
         l = length s
-    in (reverse s, (l - rvI, l - rvI - r1I - r2I))
+    in StemWord (reverse s) (l - rvI) (l - rvI - r1I - r2I)
 
-fromStemWord (s, _) = reverse s
-
-type EndBound = (Int, Int) -> Int
-rv = snd
-r2 = fst
+fromStemWord (StemWord s _ _) = reverse s
 
 
 type RemoveTry = Either StemWord StemWord
@@ -44,44 +47,76 @@ continueAnyway tr = Right $ unwrap tr
 continueIfRemoved (Left sw) = Right sw
 continueIfRemoved (Right sw) = Left sw
 
-type Endings = (EndBound, [String], [String], [Char])
 
-perfectiveGerund = (rv, ["ив", "ивши", "ившись", "ыв", "ывши", "ывшись"],
-    ["в", "вши", "вшись"], "ая")
+type SuffixBound = (StemWord -> Int)
 
-adjective = (rv, ["ее", "ие", "ые", "ое", "ими", "ыми", "ей", "ий", "ый", "ой",
-    "ем", "им", "ым", "ом", "его", "ого", "ему", "ому", "их", "ых", "ую", "юю",
-    "ая", "яя", "ою", "ею"], [], "")
+data Endings = Endings {endings :: [String], preceded :: [Char],
+                        bound :: SuffixBound}
 
-participle = (rv, ["ивш", "ывш", "ующ"], ["ем", "нн", "вш", "ющ", "щ"], "ая")
+instance Show Endings where
+    show (Endings es p _) = printf "Endings [%s %s someFun]" (show es) (show p)
 
-reflexive = (rv, ["ся", "сь"], [], "")
 
-verb = (rv, ["ила", "ыла", "ена", "ейте", "уйте", "ите", "или", "ыли", "ей",
-    "уй", "ил", "ыл", "им", "ым", "ен", "ило", "ыло", "ено", "ят", "ует", "уют",
-    "ит", "ыт", "ены", "ить", "ыть", "ишь", "ую", "ю"],
-    ["ла", "на", "ете", "йте", "ли", "й", "л", "ем", "н", "ло", "но", "ет",
-     "ют", "ны", "ть", "ешь", "нно"], "ая")
+perfectiveGerund = [
+    Endings ["ив", "ивши", "ившись", "ыв", "ывши", "ывшись"] "" rvBound,
+    Endings ["в", "вши", "вшись"] "ая" rvBound]
 
-noun :: Endings
-noun = undefined
-superlative :: Endings
-superlative = undefined
-derivational :: Endings
-derivational = undefined
-adjectival :: Endings
-adjectival = undefined
+adjective = [Endings ["ее", "ие", "ые", "ое", "ими", "ыми", "ей", "ий",
+    "ый", "ой", "ем", "им", "ым", "ом", "его", "ого", "ему", "ому", "их", "ых",
+    "ую", "юю", "ая", "яя", "ою", "ею"] "" rvBound]
 
-i :: Endings
-i = undefined
-softSign :: Endings
-softSign = undefined
+participle = [Endings ["ивш", "ывш", "ующ"] "" rvBound,
+              Endings ["ем", "нн", "вш", "ющ", "щ"] "ая" rvBound]
 
-doubleN :: Endings
-doubleN = undefined
+reflexive = [Endings ["ся", "сь"] "" rvBound]
 
-tryRemove :: Endings -> StemWord -> RemoveTry
-tryRemove = undefined
+verb = [Endings ["ила", "ыла", "ена", "ейте", "уйте", "ите", "или", "ыли", "ей",
+                 "уй", "ил", "ыл", "им", "ым", "ен", "ило", "ыло", "ено", "ят",
+                 "ует", "уют", "ит", "ыт", "ены", "ить", "ыть", "ишь", "ую", "ю"
+                 ] "" rvBound,
+        Endings ["ла", "на", "ете", "йте", "ли", "й", "л", "ем", "н", "ло",
+                 "но", "ет", "ют", "ны", "ть", "ешь", "нно"] "ая" rvBound]
+
+noun = [Endings ["а", "ев", "ов", "ие", "ье", "е", "иями", "ями", "ами",
+    "еи", "ии", "и", "ией", "ей", "ой", "ий", "й", "иям", "ям", "ием", "ем",
+    "ам", "ом", "о", "у", "ах", "иях", "ях", "ы", "ь", "ию", "ью", "ю", "ия",
+    "ья", "я"] "" rvBound]
+
+superlative = [Endings ["ейш", "ейше"] "" rvBound]
+
+derivational = [Endings ["ост", "ость"] "" r2Bound]
+
+i = [Endings ["и"] "" rvBound]
+
+softSign = [Endings ["ь"] "" rvBound]
+
+doubleN = [Endings ["н"] "н" rvBound]
+
+tryRemove :: [Endings] -> StemWord -> RemoveTry
+tryRemove es = foldl1 (>=>) $ map tryRemove' es
+
+tryRemove' :: Endings -> StemWord -> RemoveTry
+tryRemove' (Endings es ps bound) sWord = foldM tryRemoveEnding sWord rEndings
+    where
+        rEndings = map reverse es
+        withP = (length ps) == 0
+        endingL e = length (e) + (if withP then 0 else 1)
+        
+        tryRemoveEnding sw@(StemWord rString rv r2) rEnding = 
+            let el = endingL rEnding
+                endingIsSuffix = isPrefixOf rEnding rString
+                endingInBound = el <= bound sw
+                properlyPreceded = not withP || rString !! (el - 1) `elem` ps
+                reminder = StemWord (drop el rString) (rv - el) (r2 - el)
+            in if endingInBound && endingIsSuffix && properlyPreceded
+                    then Left reminder
+                    else Right sw
+         
+
+
+tryRemoveAdjectival sw = do
+    sw1 <- continueAnyway $ tryRemove adjective sw
+    tryRemove participle sw1
 
 
 step1 :: StemWord -> RemoveTry
@@ -89,7 +124,7 @@ step1 sw = do
     sw2 <- tryRemove perfectiveGerund sw
     let way2 sw3 = do
             sw4 <- continueAnyway $ tryRemove reflexive sw3
-            sw5 <- tryRemove adjectival sw4
+            sw5 <- tryRemoveAdjectival sw4
             sw6 <- tryRemove verb sw5
             tryRemove noun sw6
     way2 sw2
