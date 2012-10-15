@@ -1,38 +1,42 @@
-import Text.ParserCombinators.Parsec hiding (Parser)
-import Control.Applicative hiding (many, (<|>))
+import Control.Applicative ((<*), (<$))
 
-type Parser t = CharParser () t
+import Text.ParserCombinators.Parsec
 
 
-eol :: Parser String
--- RWH :)
-eol =   try (string "\n\r")
-    <|> try (string "\r\n")
-    <|> string "\n"
-    <|> string "\r"
-    <|> fail "Couldn't find EOL"
+eol = try (string "\n\r") <|>
+      try (string "\r\n") <|>
+      string "\n" <|>
+      string "\r" <?> "end of line"
 
+quotes = between (char '"') (char '"')
 
 eols = "\r\n"
 
-quotedValue :: Char -> Parser String
-quotedValue delim = many $ doubleQuote <|> nonQuoteAcceptable
+quotedValue delim = quotes $ many $ doubleQuote <|> nonQuoteAcceptable
     where doubleQuote = try $ '"' <$ string "\"\""
-          nonQuoteAcceptable = noneOf $ delim:'\"':eols
+          nonQuoteAcceptable = noneOf $ '"':delim:eols
 
-
-value :: Char -> Parser String
 value delim = quotedValue delim <|> many acceptable
     where acceptable = noneOf $ delim:eols
 
-
-line :: Char -> Parser [String]
 line delim = sepBy (value delim) (char delim)
 
+csv delim False = endBy (line delim) eol
+csv delim True =
+    [] <$ eof <|>
+    do firstRow <- (line delim) <* eol
+       let colCount = length firstRow
+           val = value delim
+           row = do
+               firstValue <- val
+               restValues <- sequence $ replicate (colCount - 1) $ char delim >> val
+               return $ firstValue:restValues
+       restRows <- endBy row eol
+       eof -- without this csv consumes only 1st line of non-table input. eof leads to error
+       return $ firstRow:restRows
 
-csv :: Char -> Parser [[String]]
-csv delim = endBy (line delim) eol
 
+parseCSV :: Char -> Bool -> String -> Either ParseError [[String]]
+parseCSV delim table = parse (csv delim table) ""
 
-parseCSV :: Char -> String -> Either ParseError [[String]]
-parseCSV delim = parse (csv delim) ""
+simpleCSV = parseCSV ',' False
