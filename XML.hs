@@ -78,10 +78,6 @@ attrValue :: Parser String
 attrValue = quoted '"' <|> quoted '\''
     where quoted q = between (char q) (char q) $ many $ replaced [q]
 
-content :: Parser String
-content = many1 $ replaced ""
-
-
 attr :: Parser Attr
 attr = do
     n <- attrName
@@ -109,8 +105,11 @@ tag = do
 
     return $ Tag name attrs children
 
+content :: Parser Node
+content = Content <$> (many1 $ replaced "")
+
 node :: Parser Node
-node = try comment <|> try tag <|> Content <$> content
+node = try comment <|> try tag <|> content
 
 
 parseXML :: String -> Either ParseError Document
