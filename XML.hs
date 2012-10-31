@@ -41,6 +41,7 @@ instance Show Node where
 -- A Tag. Not content or comment! May turn to "tag with declarations, comments"
 type Document = Node
 
+
 charRef :: Parser Char
 charRef = do
     char '#'
@@ -49,7 +50,6 @@ charRef = do
             digits <- many pf
             let ((d, _):_) = rf digits
             return $ toEnum d
-
 
 reference p = char '&' >> p <* char ';'
 entities = [('\'', "apos"), ('"', "quot"), ('<', "lt"), ('>', "gt"), ('&', "amp")]
@@ -109,7 +109,7 @@ content :: Parser Node
 content = Content <$> (many1 $ replaced "")
 
 node :: Parser Node
-node = try comment <|> try tag <|> content
+node = content <|> try comment <|> tag 
 
 
 parseXML :: String -> Either ParseError Document
