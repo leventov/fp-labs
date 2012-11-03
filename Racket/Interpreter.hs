@@ -2,53 +2,56 @@ import Racket.Parser
 import Racket.Core
 import Racket.Library
 
-import qualified Data.Map as M
-import Control.Monad.Error (catchError)
+import Control.Applicative ((<$>))
 import Data.List (intercalate)
-import Control.Applicative ((<*), (<$), (<$>), liftA2)
-import Debug.Trace (trace)
 
-import System.IO (BufferMode (NoBuffering), stdin, stdout, hSetBuffering)
+import Control.Monad.Error (catchError)
+
+import qualified Data.Map as M
 
 builtins = let bi n b = (n, FuncExpr $ BuiltinFunc n b) in M.fromList [
+    bi "env" printEnv,
+
+    bi "error" errorBuiltin,
     bi "define" define,
+    bi "if" ifBuiltin,
+
     bi "lambda" lambda,
+    bi "begin" begin,
     bi "apply" (funcListBuiltin apply'),
     bi "map" mapBuiltin,
     bi "list" list,
     bi "quote" quote,
+
+    bi "range" range,
+    bi "cons" cons,
     bi "head" (listBuiltin head),
     bi "tail" (listBuiltin ListExpr . tail),
     bi "init" (listBuiltin ListExpr . init),
     bi "last" (listBuiltin last),
+    
     bi "+" (simpleArith (+)),
     bi "*" (simpleArith (*)),
     bi "-" (simpleArith (-)),
     bi "/" division,
+    
     bi "==" eq,
     bi "<" (orderBuiltin (<)),
     bi "<=" (orderBuiltin (<=)),
     bi ">" (orderBuiltin (>)),
     bi ">=" (orderBuiltin (>=)),
-    bi "if" ifBuiltin,
-    bi "range" range,
-    bi "error" errorBuiltin,
-    bi "cons" cons,
-    bi "env" printEnv]
-
-greeting = "Racket interpreter.\n" --  Type `(env)` to print available functions.\n"
+    
+    bi "and" (boolBuiltin and),
+    bi "or" (boolBuiltin or)]
 
 runExpr :: Expr -> Evaluation
 runExpr e = (eval e) `catchError` (return . IdentifierExpr)
-
 
 mainLoop env es = 
     let comp = sequence $ runExpr <$> es
         showRight rs = intercalate "\n" $ show <$> rs
     in either show showRight $ fst $ run comp env
 
-setupBuffering = do
-    hSetBuffering stdin NoBuffering
-    hSetBuffering stdout NoBuffering
-
-main = setupBuffering >> putStr greeting >> (interact $ \s -> (either show (mainLoop builtins) $ parseExprs s) ++ "\n")
+main = do
+    putStr "Racket interpreter. Type `(env)` to print available functions.\n"
+    interact $ \s -> (either show (mainLoop builtins) $ parseExprs s) ++ "\n"

@@ -1,8 +1,8 @@
-module Racket.Parser (Expr, parseExprs, expr) where
+module Racket.Parser (parseExprs) where
     
 import Racket.Core
 
-import Control.Applicative ((<*), (<$), (<$>), liftA2)
+import Control.Applicative ((<$>), liftA2)
 import Text.ParserCombinators.Parsec hiding (Parser)
 import qualified Text.ParserCombinators.Parsec.Token as P
 
@@ -34,6 +34,8 @@ braces = P.parens lexer <||> P.brackets lexer
 
 lexeme = P.lexeme lexer
 
+quotedExpr :: Parser Expr
+quotedExpr = QuotedExpr <$> do {char '\''; expr;}
 
 listExpr :: Parser Expr
 listExpr = ListExpr <$> braces exprs
@@ -59,7 +61,7 @@ voidExpr = string "#<void>" >> return Void
 
 expr :: Parser Expr
 expr = choice $ map try $
-    [listExpr, identifierExpr, integerExpr,  doubleExpr, stringExpr,
+    [quotedExpr, listExpr, identifierExpr, doubleExpr, integerExpr, stringExpr,
     boolExpr, voidExpr]
 
 exprs :: Parser [Expr]

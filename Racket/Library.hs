@@ -2,19 +2,25 @@ module Racket.Library where
 
 import Racket.Core
 
+import Control.Applicative ((<$>))
+import Data.List (intercalate)
+
 import Control.Monad.State
 import Control.Monad.Error
+
 import qualified Data.Map as M
-import Control.Applicative ((<*), (<$), (<$>), liftA2)
+
 import Text.Printf
 
-import Data.List (intercalate)
+errorBuiltin :: Builtin
+errorBuiltin = \es -> do
+    (msg:_) <- checkArgs 1 es
+    fail $ show msg
 
 library :: Builtin -> Builtin
 library builtin = \args -> do
     eArgs <- evalArgs args
     keepEnv $ builtin eArgs
-
 
 builtinOf2Args builtin = \args -> do
     (fa:sa:_) <- checkArgs 2 args
@@ -28,7 +34,8 @@ checkDef expr = putResult $ case expr of
             then Right $ getIdentifier <$> es
             else defError
     _                  -> defError
-    where defError = Left "first arg should be either identifier or list of identifiers"
+    where defError = Left "first arg should be either identifier \
+                           \or list of identifiers"
 
 define = builtinOf2Args $ \defExpr body -> do
     (name:args) <- checkDef defExpr
@@ -37,6 +44,8 @@ define = builtinOf2Args $ \defExpr body -> do
         newEnv = M.insert name funcExpr env
     putEnv newEnv
     return Void
+
+begin = \args -> keepEnv $ foldl1 (>>) $ eval <$> Void:args
 
 lambda = builtinOf2Args $ \defExpr body -> do
     args@(first:rest) <- checkDef defExpr
@@ -49,14 +58,16 @@ funcListBuiltin builtin = library . builtinOf2Args $ \fe le -> do
     let ms1 = if isFunc fe then []
                 else [printf "first arg should be function, %s given" (show fe)]
         ms2 = if isList le then ms1
-                else (printf "second arg should be list, %s given" $ show le):ms1
+                else (printf "second arg should be list, \
+                              \%s given" $ show le):ms1
     check (null ms2) (intercalate "\n" ms2)
     builtin (getFunc fe) (getList le)
 
 mapBuiltin = funcListBuiltin mapFunc
     where mapFunc f es = do
             check (all isList es) $
-                printf "second arg should be list of lists, %s given" (show $ ListExpr es)
+                printf "second arg should be list of lists, %s given" $
+                       show $ ListExpr es
             res <- sequence $ map (apply' f) $ getList <$> es
             return $ ListExpr res
 
@@ -80,7 +91,7 @@ simpleArith op = library $ \es -> do
     check (el >= 2) "function accepts at least 2 args"
     check (all isNumeric es) "function args should be numeric"
     if all isInteger es
-        -- аргумент - оператор должен быть над одним конкретным типом
+        -- haskell insists op should be over one concrete type
         then let res = foldl1 op $ getNumericValue <$> es
              in return $ IntegerExpr $ round res -- dirty hack
 
@@ -90,13 +101,14 @@ simpleArith op = library $ \es -> do
 builtinOf2Numerics builtin = library $ builtinOf2Args $ \a1 a2 -> do
     let both = [a1, a2]
     check (all isNumeric both) $
-        printf "function args should be numeric, %s and %s given" (show a1) (show a2)
+        printf "function args should be numeric, \
+                \%s and %s given" (show a1) (show a2)
     let a1V = getNumericValue a1
         a2V = getNumericValue a2
     builtin a1V a2V
 
 division = builtinOf2Numerics $ \num dem -> do
-    check (dem == 0.0) "division by zero"
+    check (dem /= 0.0) $ printf "division by zero: %f" dem
     return . DoubleExpr $ num / dem
 
 eq :: Builtin
@@ -105,27 +117,29 @@ eq = library $ builtinOf2Args $ \e1 e2 -> return $ BoolExpr $ e1 == e2
 orderBuiltin op = library $ builtinOf2Args $ \e1 e2 -> do
     let both = [e1, e2]
     check (all isOrderable both) $
-        printf "function args should be either numeric, bools or strings, %s and %s given" (show e1) (show e2)
+        printf "function args should be either numeric, bools or strings, \
+                \%s and %s given" (show e1) (show e2)
     return $ BoolExpr $ op e1 e2
 
 -- shouldn't evaluate branches greedy !!!
 ifBuiltin = \args -> keepEnv $ do
     (p:e1:e2:_) <- checkArgs 3 args
     pV <- eval p
-    check (isBool pV) $ printf "first arg should be bool, %s given" (show pV)
+    check (isBool pV) $ printf "first arg should be bool, %s given" $ show pV
     if (getBool pV) then eval e1 else eval e2
 
 range = library $ builtinOf2Args $ \s e -> do
     let both = [s, e]
     check (all isInteger both) $
-        printf "function args should be integer, %s and %s given" (show s) (show e)
+        printf "function args should be integer, \
+                \%s and %s given" (show s) (show e)
     return . ListExpr $ IntegerExpr <$> [(getInteger s)..(getInteger e)]
-
-errorBuiltin :: Builtin
-errorBuiltin = \es -> do
-    (msg:_) <- checkArgs 1 es 
-    fail $ show msg
 
 cons = library $ builtinOf2Args $ \e l -> do
     check (isList l) $ printf "second arg should be list, %s given" $ show l
     return . ListExpr $ e:(getList l)
+
+boolBuiltin op = library $ \args -> do
+    check (all isBool args) "function args should be bool" 
+    return . BoolExpr . op $ getBool <$> args
+    
