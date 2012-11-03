@@ -1,6 +1,6 @@
-module Parser (Expr, parseExprs) where
+module Racket.Parser (Expr, parseExprs, expr) where
     
-import Expression
+import Racket.Core
 
 import Control.Applicative ((<*), (<$), (<$>), liftA2)
 import Text.ParserCombinators.Parsec hiding (Parser)
@@ -8,15 +8,13 @@ import qualified Text.ParserCombinators.Parsec.Token as P
 
 type Parser t = CharParser () t
 
-
-
 identifierLetter :: Parser Char
-identifierLetter = noneOf "()[]{}\",'`;#|\\"
+identifierLetter = noneOf "()[]{}\",'`;#|\\ \n1234567890"
 
 racketLanguage = P.LanguageDef
-    { P.commentStart = "@;{"
-    , P.commentEnd = "}"
-    , P.commentLine = "@;"
+    { P.commentStart = "/*"
+    , P.commentEnd = "*/"
+    , P.commentLine = "//"
     , P.nestedComments = True
     , P.identStart = identifierLetter
     , P.identLetter = identifierLetter
@@ -31,14 +29,17 @@ lexer = P.makeTokenParser racketLanguage
 
 whiteSpace = P.whiteSpace lexer
 
-braces = P.braces lexer <||> P.brackets lexer
+braces = P.parens lexer <||> P.brackets lexer
     where (<||>) = liftA2 (<|>)
 
+lexeme = P.lexeme lexer
+
+
 listExpr :: Parser Expr
-listExpr = char '\'' >> List <$> (braces $ expr `endBy` whiteSpace)
+listExpr = ListExpr <$> braces exprs
 
 identifier = P.identifier lexer
-identifierExpr = Identifier <$> identifier
+identifierExpr = IdentifierExpr <$> identifier
 
 integer = P.integer lexer
 integerExpr = IntegerExpr <$> integer
@@ -55,20 +56,16 @@ boolExpr = char '#' >> BoolExpr <$> (== 't') <$> oneOf "tf"
 voidExpr :: Parser Expr
 voidExpr = string "#<void>" >> return Void
 
-simpleExpr :: Parser Expr
-simpleExpr = choice $ map try $
-    [listExpr, identifierExpr, doubleExpr, integerExpr, stringExpr, boolExpr, voidExpr]
-
-functionExpr :: Parser Expr
-functionExpr = braces $ do
-    i <- whiteSpace >> identifierExpr <* whiteSpace
-    args <- expr `endBy` whiteSpace
-    return $ List $ i:args
 
 expr :: Parser Expr
-expr = simpleExpr <|> functionExpr
+expr = choice $ map try $
+    [listExpr, identifierExpr, integerExpr,  doubleExpr, stringExpr,
+    boolExpr, voidExpr]
+
+exprs :: Parser [Expr]
+exprs = whiteSpace >> (many $ lexeme expr)
 
 type Program = [Expr]
 
 parseExprs :: String -> Either ParseError Program
-parseExprs = parse (whiteSpace >> (expr `endBy` whiteSpace)) "(unknown)"
+parseExprs = parse exprs "(unknown)"
