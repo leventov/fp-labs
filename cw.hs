@@ -1,12 +1,10 @@
 import Control.Applicative
-import Debug.Trace (trace)
 
 localMin :: ([Double] -> Double) -> Int -> [Double]
 localMin f n = minIter f 1 $ replicate n 0
 
 minH = 0.0000001
 
-minIter f h b | trace (show h ++ " " ++ show b) False = undefined
 minIter f h b = if h <= minH then b else
     let nb = research f b h
     in if nb == b then minIter f (h * 0.1) b
@@ -17,11 +15,10 @@ minIter f h b = if h <= minH then b else
                  pack = ZipList . (replicate $ length b) . fromIntegral 
                  zz li = map (getZipList .
                     (\i -> vb .+. (db .*. (pack i)))) li
-                 nbll = (:) (b, nb) $
+                 nnb = snd $ last $ (:) (b, nb) $
                     takeWhile (\(v1, v2) -> f v1 > f v2) $
                         zip (zz [1..]) (zz [2..])
-                 nnb l | trace (show $ length l) True = snd $ last l
-             in minIter f (h * 0.5) $ nnb nbll
+             in minIter f (h * 0.5) nnb
 
 research f b h = foldl choose [] b
     where choose computed bi =
@@ -30,9 +27,9 @@ research f b h = foldl choose [] b
                     in f $ computed ++ x:p2
                 steps = [bi, bi - h, bi + h]
                 stepValues = map cf steps
-                m | trace (show stepValues) True = minimum stepValues
+                m = minimum stepValues
                 minI = head $ filter ((== m) . (stepValues !!)) [0..]
-                minStep | trace (show minI) True = steps !! minI
+                minStep = steps !! minI
             in computed ++ [minStep]
 
 f1 (x1:x2:[]) = 100 * ((x2 - (x1 ^ 2)) ^ 2) + ((1 - x1) ^ 2)
