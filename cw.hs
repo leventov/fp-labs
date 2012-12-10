@@ -1,5 +1,6 @@
 import Control.Applicative
 
+-- Hooke-Jeeves method
 localMin :: ([Double] -> Double) -> Int -> [Double]
 localMin f n = minIter f 1 $ replicate n 0
 
@@ -29,15 +30,14 @@ research f b h = foldl choose [] b
                 stepValues = map cf steps
                 m = minimum stepValues
                 minI = head $ filter ((== m) . (stepValues !!)) [0..]
-                minStep = steps !! minI
-            in computed ++ [minStep]
+            in computed ++ [steps !! minI]
 
-f1 (x1:x2:[]) = 100 * ((x2 - (x1 ^ 2)) ^ 2) + ((1 - x1) ^ 2)
+f1 [x1, x2] = 100 * ((x2 - (x1 ^ 2)) ^ 2) + ((1 - x1) ^ 2)
 
-f2 (x:y:z:[]) = (x - 2) ^ 2 + (y - 5) ^ 2 + (z + 2) ^ 4
+f2 [x, y, z] = (x - 2) ^ 2 + (y - 5) ^ 2 + (z + 2) ^ 4
 
-f3 (a:b:c:d:[]) = (a + 10 * b) ^ 2 + 5 * ((c - d) ^ 2) +
+f3 [a, b, c, d] = (a + 10 * b) ^ 2 + 5 * ((c - d) ^ 2) +
                   (b - 2 * c) ^ 4 + 10 * ((a - d) ^ 4)
 
-f4 (x:y:[]) = sum [((exp (a * x) - exp (a * y)) -
-                    (exp a - exp (10 * a))) ^ 2 | a <- [-1, 0]] 
+f4 [x, y] = sum [((exp (a * x) - exp (a * y)) -
+                  (exp a - exp (10 * a))) ^ 2 | a <- [-1, 0]] 
